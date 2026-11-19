@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Petoron Domain Name</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:#0f141b;color:#edf0f4;font-family:Arial,sans-serif}
+.page{max-width:1180px;margin:0 auto}
+h1{color:#ff9f2a;margin:0 0 8px}
+h2{color:#ffb45c;font-size:19px;margin:0 0 14px}
+h3{color:#ffb45c;font-size:15px;margin:0 0 10px}
+.note{color:#aab2c0;font-size:13px;line-height:1.5}
+.box{border:1px solid #333d4b;background:#151b24;padding:18px;border-radius:12px;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:block;font-size:13px;font-weight:bold;margin:12px 0 5px}
+input,select{width:100%;background:#202938;color:#fff;border:1px solid #4b5563;border-radius:7px;padding:11px;margin:0;min-width:0}
+input[readonly]{background:#171f2a;color:#ffc178;border:1px dashed #8a6338;cursor:default;pointer-events:none;user-select:none;box-shadow:inset 0 0 0 1px rgba(255,159,42,.06)}
+input[readonly]:focus{outline:none;border-color:#b98243;box-shadow:0 0 0 2px rgba(255,159,42,.10)}
+button{background:#ff9f2a;color:#111;font-weight:bold;border:0;border-radius:7px;padding:11px 15px;cursor:pointer;margin:8px 6px 0 0}
+button.secondary{background:#2d3748;color:#fff;border:1px solid #4b5563}
+button:disabled{opacity:.45;cursor:not-allowed}
+.tabs{display:flex;gap:8px;margin:18px 0}
+.tab{background:#202938;color:#d8dee8;border:1px solid #465160;flex:1}
+.tab.active{background:#ff9f2a;color:#111;border-color:#ff9f2a}
+.panel{display:none}.panel.active{display:block}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.actions button{flex:1;min-width:180px}
+pre{background:#090d13;border:1px solid #303846;padding:13px;border-radius:8px;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;min-height:42px;color:#dce3ed}
+.warn{color:#ffcc66}.ok{color:#7dff9b}
+.section{border-top:1px solid #303846;padding-top:16px;margin-top:16px}
+.field-help{font-size:12px;color:#8f9aaa;margin-top:4px}
+@media(max-width:720px){body{padding:12px}.grid{grid-template-columns:1fr}.box{padding:14px}.tabs{position:sticky;top:0;z-index:3;background:#0f141b;padding:6px 0}.actions button{min-width:100%}}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Petoron Domain Name</h1>
+<p class="note">Register domains, manage your domain NFTs, receive ETH by domain name, and buy or sell domains.</p>
+
+<div class="box">
+<h2>Connection</h2>
+<div class="grid">
+<div><label>Ethereum RPC URL</label><input id="rpc" placeholder="https://..."></div>
+<div><label>Private Key</label><input id="privateKey" type="password" autocomplete="off" placeholder="0x..."></div>
+</div>
+<p class="note" id="contractConfig">Loading PDN contract configuration...</p>
+<div class="actions">
+<button onclick="connectWallet()">Connect</button>
+<button class="secondary" onclick="refreshConnection()">Refresh Wallet</button>
+<button class="secondary" onclick="disconnectWallet()">Disconnect</button>
+</div>
+<p class="note">The private key is used in this browser to sign transactions. It is not sent to an application server. Use this client only on a trusted local device. Never enter a wallet containing funds you cannot afford to risk.</p>
+<pre id="connectionStatus">Not connected</pre>
+</div>
+
+<div class="tabs">
+<button id="tabPdn" class="tab active" onclick="switchTab('pdn')">PDN</button>
+<button id="tabMarket" class="tab" onclick="switchTab('market')">Market</button>
+</div>
+
+<div id="pdnPanel" class="panel active">
+<div class="box">
+<h2>Domain registration</h2>
+<div class="grid">
+<div><label>Domain name</label><input id="mintName" placeholder="example"></div>
+<div><label>Registration price (calculated automatically)</label><input id="mintPrice" readonly tabindex="-1" placeholder="Use Calculate Price"></div>
+</div>
+<div class="actions">
+<button onclick="calculateMintPrice()">Calculate Price</button>
+<button onclick="mintDomain()">Register Domain NFT</button>
+</div>
+<pre id="mintResult">Enter a domain name to calculate its registration price.</pre>
+</div>
+
+<div class="box">
+<h2>Find a domain</h2>
+<div class="grid">
+<div><label>Domain name</label><input id="lookupName" placeholder="Petoron"></div>
+<div><label>Token ID</label><input id="lookupTokenId" placeholder="1"></div>
+</div>
+<div class="actions">
+<button class="secondary" onclick="lookupByName()">Lookup by Name</button>
+<button class="secondary" onclick="lookupByToken()">Lookup by Token ID</button>
+<button class="secondary" onclick="lookupWalletDomains()">Check Connected Wallet Balance</button>
+</div>
+<pre id="domainLookup"></pre>
+</div>
+
+<div class="box">
+<h2>My domain NFTs</h2>
+<p class="note">The client checks token IDs issued by PDN and displays tokens currently owned by your connected wallet.</p>
+<button class="secondary" onclick="loadMyNFTs()">View My Domain NFTs</button>
+<pre id="myNFTs">Connect your wallet to view your domains.</pre>
+</div>
+
+<div class="box">
+<h2>Check domain availability</h2>
+<div class="grid">
+<div><label>Domain name</label><input id="availabilityName" placeholder="mydomain"></div>
+<div><label>Registration price (calculated automatically)</label><input id="availabilityPrice" readonly tabindex="-1"></div>
+</div>
+<button class="secondary" onclick="checkDomainAvailability()">Check Availability</button>
+<pre id="availabilityResult"></pre>
+</div>
+
+<div class="box">
+<h2>Transfer domain NFT</h2>
+<div class="grid">
+<div><label>Token ID</label><input id="transferTokenId" placeholder="1"></div>
+<div><label>Recipient address</label><input id="transferTo" placeholder="0x..."></div>
+</div>
+<div class="actions">
+<button onclick="transferDomain()">Transfer NFT</button>
+<button class="secondary" onclick="safeTransferDomain()">Safe Transfer NFT</button>
+</div>
+<pre id="transferResult">Transfer details and transaction status will appear here.</pre>
+</div>
+
+
+
+<div class="box">
+<h2>Send ETH by domain name</h2>
+<div class="grid">
+<div><label>Domain name</label><input id="sendName" placeholder="Petoron"></div>
+<div><label>Amount (ETH)</label><input id="sendAmount" placeholder="0.01"></div>
+</div>
+<button onclick="sendEthByName()">Send ETH to Domain Owner</button>
+<p class="note">The contract resolves the current NFT owner when the transaction executes and forwards the full amount to that address.</p>
+<pre id="sendResult">Recipient resolution and transaction status will appear here.</pre>
+</div>
+
+
+
+
+</div>
+
+<div id="marketPanel" class="panel">
+<div class="box">
+<h2>Available domains for purchase</h2>
+<p class="note">Loads active listings recorded by PDN Market, including each listing ID and domain token ID.</p>
+<button class="secondary" onclick="loadActiveListings()">Browse Domains for Sale</button>
+<pre id="activeListings">Connect your wallet to browse active listings.</pre>
+</div>
+
+<div class="box">
+<h2>1. NFT approval for Market</h2>
+<p class="note">Approve the specific domain NFT before listing it. Revoke Approval sets the approved address to zero and prevents the Market from transferring that NFT until you approve it again.</p>
+<div class="grid">
+<div><label>Token ID</label><input id="approveTokenId" placeholder="1"></div>
+</div>
+<div class="actions">
+<button onclick="approveMarket()">Approve Market for NFT</button>
+<button class="secondary" onclick="revokeMarketApproval()">Revoke Approval</button>
+<button class="secondary" onclick="checkTokenApproval()">Check Token Approval</button>
+</div>
+<pre id="approvalResult"></pre>
+</div>
+
+<div class="box">
+<h2>2. List domain NFT for sale</h2>
+<p class="note">First approve the NFT in the section above. Then set your asking price and deposit the NFT into the Market contract. The seller receives the asking price; the buyer pays the asking price plus the 2% Market fee.</p>
+<div class="grid">
+<div><label>Domain Token ID</label><input id="listingTokenId" placeholder="1"></div>
+<div><label>Your asking price (ETH)</label><input id="listingPrice" placeholder="7"></div>
+<div><label>Market fee (2%, paid by buyer)</label><input id="listingFeeEstimate" readonly tabindex="-1"></div>
+<div><label>Buyer total (asking price + fee)</label><input id="listingTotalEstimate" readonly tabindex="-1"></div>
+<div><label>Payout address</label><input id="listingPayout" placeholder="0x..."></div>
+</div>
+<button onclick="createListing()">Deposit NFT and Create Listing</button>
+<pre id="listingCreateResult">Listing calculation and transaction status will appear here.</pre>
+</div>
+
+<div class="box">
+<h2>View listing</h2>
+<div class="grid">
+<div><label>Listing ID</label><input id="viewListingId" placeholder="1"></div>
+</div>
+<div class="actions">
+<button class="secondary" onclick="viewListing()">Load Listing</button>
+<button class="secondary" onclick="quotePurchase()">Calculate Total</button>
+</div>
+<pre id="listingResult"></pre>
+</div>
+
+<div class="box">
+<h2>Buy domain</h2>
+<p class="note">Enter a Listing ID. The client reads its real on-chain price and immediately calculates the 2% fee and exact amount to send. For example, a 7 ETH listing requires 7.14 ETH.</p>
+<div class="grid">
+<div><label>Listing ID</label><input id="buyListingId" placeholder="1"></div>
+<div><label>Listing price</label><input id="buyPrice" readonly tabindex="-1"></div>
+<div><label>Market fee (2%)</label><input id="buyFee" readonly tabindex="-1"></div>
+<div><label>Total payable</label><input id="buyTotal" readonly tabindex="-1"></div>
+</div>
+<div class="actions">
+<button class="secondary" onclick="quotePurchase()">Calculate Total</button>
+<button onclick="buyListing()">Buy NFT</button>
+</div>
+<p class="note">The client reads the listing price and calculates the exact total. The contract requires msg.value to equal price + 2% fee. Sending any other amount reverts.</p>
+<pre id="buyResult">Purchase quote and transaction status will appear here.</pre>
+</div>
+
+<div class="box">
+<h2>Cancel listing</h2>
+<div class="grid">
+<div><label>Listing ID</label><input id="cancelListingId" placeholder="1"></div>
+</div>
+<button onclick="cancelListing()">Cancel Listing and Return NFT</button>
+<pre id="cancelResult">Cancellation status will appear here.</pre>
+</div>
+
+
+</div>
+
+<div class="box">
+<h2>Transaction log</h2>
+<pre id="log">Ready</pre>
+</div>
+</div>
+<script>
+const PDN_ABI = [
+"function name() view returns(string)","function symbol() view returns(string)","function market() view returns(address)",
+"function MAX_NAME_LENGTH() view returns(uint256)",
+"function nextTokenId() view returns(uint256)",
+
+"function tokenIdByName(string) view returns(uint256)",
+"function balanceOf(address) view returns(uint256)","function ownerOf(uint256) view returns(address)","function displayNameOf(uint256) view returns(string)","function canonicalNameOf(uint256) view returns(string)",
+"function approve(address,uint256)","function getApproved(uint256) view returns(address)","function setApprovalForAll(address,bool)","function isApprovedForAll(address,address) view returns(bool)",
+"function transferFrom(address,address,uint256)","function safeTransferFrom(address,address,uint256)","function safeTransferFrom(address,address,uint256,bytes)",
+"function mint(string) payable returns(uint256)","function sendETH(string) payable",
+
+
+"function mintPrice(string) view returns(uint256)","function canonicalize(string) pure returns(string)","function supportsInterface(bytes4) pure returns(bool)",
+"function isVerified(uint256) view returns(bool)","function activeVerificationRequestByDomain(uint256) view returns(uint256)",
+
+
+];
+const MARKET_ABI = [
+"function pdnCore() view returns(address)","function FEE_BPS() view returns(uint256)","function BPS_DENOMINATOR() view returns(uint256)",
+"function nextListingId() view returns(uint256)",
+"function activeListingByToken(uint256) view returns(uint256)","function listings(uint256) view returns(uint256 tokenId,address originalDepositor,address payoutAddress,uint256 price,uint8 status,string displayName,string canonicalName)",
+
+"function depositNFT(uint256,uint256,address) returns(uint256)","function cancelListing(uint256)","function buy(uint256) payable",
+
+];
+let provider=null, signer=null, pdn=null, market=null, walletAddress=null;
+let pdnAddress=null, marketAddress=null;
+const $=id=>document.getElementById(id);
+const eth=x=>ethers.formatEther(x);
+const wei=x=>ethers.parseEther(String(x).trim());
+const addr=x=>ethers.getAddress(String(x).trim());
+const out=(id,x)=>$(id).textContent=typeof x==="string"?x:JSON.stringify(x,null,2);
+const log=x=>out("log",x);
+const inline=(id,x)=>{if($(id))out(id,x)};
+const fail=e=>log({error:e.shortMessage||e.reason||e.message||String(e)});
+async function tx(label,promise,targetId){
+  const target=targetId||"log";
+  inline(target,{action:label,status:"Waiting for wallet confirmation"});
+  log(label+": waiting for wallet confirmation");
+  const t=await promise;
+  const pending={action:label,transaction:t.hash,status:"pending"};
+  inline(target,pending);
+  log(pending);
+  const r=await t.wait();
+  const result={action:label,transaction:t.hash,status:r.status===1?"confirmed":"failed",blockNumber:r.blockNumber};
+  inline(target,result);
+  log(result);
+  return r;
+}
+function requireConnected(){
+  if(!provider||!signer||!pdn||!market)throw Error("Connect your wallet first");
+}
+function switchTab(which){
+  $("pdnPanel").classList.toggle("active",which==="pdn");
+  $("marketPanel").classList.toggle("active",which==="market");
+  $("tabPdn").classList.toggle("active",which==="pdn");
+  $("tabMarket").classList.toggle("active",which==="market");
+}
+async function connectWallet(){
+  try{
+    const rpcUrl=$("rpc").value.trim(), key=$("privateKey").value.trim();
+    if(!rpcUrl||!key)throw Error("RPC URL and private key are required");
+    if(!pdnAddress||!marketAddress)throw Error("PDN contract configuration is unavailable");
+    const paddr=addr(pdnAddress), maddr=addr(marketAddress);
+    provider=new ethers.JsonRpcProvider(rpcUrl);
+    signer=new ethers.Wallet(key.startsWith("0x")?key:"0x"+key,provider);
+    walletAddress=await signer.getAddress();
+    pdn=new ethers.Contract(paddr,PDN_ABI,signer);
+    market=new ethers.Contract(maddr,MARKET_ABI,signer);
+    const [network,balance,coreRef,marketCore]=await Promise.all([
+      provider.getNetwork(),provider.getBalance(walletAddress),pdn.market(),market.pdnCore()
+    ]);
+    if(network.chainId!==1n)throw Error("Connect to Ethereum Mainnet (chain ID 1)");
+    if(coreRef!==ethers.ZeroAddress&&coreRef.toLowerCase()!==maddr.toLowerCase())throw Error("PDN.market() is already configured to a different address");
+    if(marketCore.toLowerCase()!==paddr.toLowerCase())throw Error("Market.pdnCore() does not match the entered PDN address");
+    out("connectionStatus",{connected:true,network:network.name,chainId:network.chainId.toString(),wallet:walletAddress,balanceETH:eth(balance),pdn:paddr,market:maddr});
+    log("Connected. PDN and Market addresses verified.");
+  }catch(e){provider=null;signer=null;pdn=null;market=null;fail(e);out("connectionStatus",{error:e.shortMessage||e.message})}
+}
+async function refreshConnection(){
+  try{requireConnected();const [b,n]=await Promise.all([provider.getBalance(walletAddress),provider.getBlockNumber()]);out("connectionStatus",{wallet:walletAddress,balanceETH:eth(b),blockNumber:n})}catch(e){fail(e)}
+}
+function disconnectWallet(){
+  provider=null;signer=null;pdn=null;market=null;walletAddress=null;
+  $("privateKey").value="";
+  out("connectionStatus","Disconnected. Private key cleared from the input.");
+}
+
+async function checkDomainAvailability(){
+  try{
+    requireConnected();
+    const name=$("availabilityName").value.trim();
+    if(!name)throw Error("Enter a domain name");
+    const canonical=await pdn.canonicalize(name);
+    const id=await pdn.tokenIdByName(canonical);
+    const price=await pdn.mintPrice(name);
+    $("availabilityPrice").value=eth(price)+" ETH";
+    out("availabilityResult",{name,canonicalName:canonical,available:id===0n,existingTokenId:id.toString(),registrationPriceETH:eth(price)});
+  }catch(e){out("availabilityResult",{error:e.shortMessage||e.message})}
+}
+async function loadMyNFTs(){
+  try{
+    requireConnected();
+    const next=await pdn.nextTokenId();
+    const found=[];
+    for(let i=1n;i<next;i++){
+      try{
+        const owner=await pdn.ownerOf(i);
+        if(owner.toLowerCase()===walletAddress.toLowerCase()){
+          const [display,canonical]=await Promise.all([pdn.displayNameOf(i),pdn.canonicalNameOf(i)]);
+          found.push({tokenId:i.toString(),name:display,canonicalName:canonical});
+        }
+      }catch(e){}
+    }
+    out("myNFTs",{wallet:walletAddress,total:found.length,nfts:found});
+  }catch(e){out("myNFTs",{error:e.shortMessage||e.message})}
+}
+async function loadActiveListings(){
+  try{
+    requireConnected();
+    const next=await market.nextListingId();
+    const found=[];
+    for(let i=1n;i<next;i++){
+      try{
+        const l=await market.listings(i);
+        if(Number(l.status)===1){
+          found.push({listingId:i.toString(),tokenId:l.tokenId.toString(),name:l.displayName,canonicalName:l.canonicalName,priceETH:eth(l.price),payoutAddress:l.payoutAddress,seller:l.originalDepositor});
+        }
+      }catch(e){}
+    }
+    out("activeListings",{total:found.length,listings:found});
+  }catch(e){out("activeListings",{error:e.shortMessage||e.message})}
+}
+async function updateMintPriceField(){
+  try{
+    if(!pdn)return;
+    const name=$("mintName").value.trim();
+    if(!name){$("mintPrice").value="";return}
+    const price=await pdn.mintPrice(name);$("mintPrice").value=eth(price)+" ETH";inline("mintResult",{name,registrationPrice:eth(price)+" ETH"});
+  }catch(e){$("mintPrice").value="Invalid name"}
+}
+async function calculateMintPrice(){
+  try{requireConnected();const name=$("mintName").value.trim();if(!name)throw Error("Enter a domain name");const p=await pdn.mintPrice(name),canonical=await pdn.canonicalize(name);$("mintPrice").value=eth(p)+" ETH";inline("mintResult",{name,canonicalName:canonical,registrationPrice:eth(p)+" ETH"})}catch(e){inline("mintResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function mintDomain(){
+  try{requireConnected();const name=$("mintName").value.trim();if(!name)throw Error("Enter a domain name");const p=await pdn.mintPrice(name);$("mintPrice").value=eth(p)+" ETH";await tx("Register domain NFT",pdn.mint(name,{value:p}),"mintResult")}catch(e){inline("mintResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function lookupByName(){
+  try{requireConnected();const name=$("lookupName").value.trim();const canonical=await pdn.canonicalize(name);const id=await pdn.tokenIdByName(canonical);if(id===0n)throw Error("Domain not registered");const [owner,display,verified,approval,active]=await Promise.all([pdn.ownerOf(id),pdn.displayNameOf(id),pdn.isVerified(id),pdn.getApproved(id),pdn.activeVerificationRequestByDomain(id)]);out("domainLookup",{tokenId:id.toString(),displayName:display,canonicalName:canonical,owner,verified,approvedAddress:approval,activeVerificationRequest:active.toString()})}catch(e){out("domainLookup",{error:e.shortMessage||e.message})}
+}
+async function lookupByToken(){
+  try{requireConnected();const id=$("lookupTokenId").value.trim();const [owner,display,canonical,verified,approval,active]=await Promise.all([pdn.ownerOf(id),pdn.displayNameOf(id),pdn.canonicalNameOf(id),pdn.isVerified(id),pdn.getApproved(id),pdn.activeVerificationRequestByDomain(id)]);out("domainLookup",{tokenId:id,displayName:display,canonicalName:canonical,owner,verified,approvedAddress:approval,activeVerificationRequest:active.toString()})}catch(e){out("domainLookup",{error:e.shortMessage||e.message})}
+}
+async function lookupWalletDomains(){
+  try{requireConnected();out("domainLookup",{wallet:walletAddress,balanceOf:(await pdn.balanceOf(walletAddress)).toString(),nextTokenId:(await pdn.nextTokenId()).toString()})}catch(e){fail(e)}
+}
+async function transferDomain(){
+  try{requireConnected();const to=addr($("transferTo").value),id=$("transferTokenId").value.trim();inline("transferResult",{tokenId:id,recipient:to});await tx("Transfer domain NFT",pdn.transferFrom(walletAddress,to,id),"transferResult")}catch(e){inline("transferResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function safeTransferDomain(){
+  try{requireConnected();const to=addr($("transferTo").value),id=$("transferTokenId").value.trim();inline("transferResult",{tokenId:id,recipient:to});await tx("Safe transfer domain NFT",pdn["safeTransferFrom(address,address,uint256)"](walletAddress,to,id),"transferResult")}catch(e){inline("transferResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function approveMarket(){
+  try{requireConnected();const m=await pdn.market();const id=$("approveTokenId").value.trim();if(!id)throw Error("Enter Token ID");await tx("Approve native Market",pdn.approve(m,id),"approvalResult");await checkTokenApproval()}catch(e){out("approvalResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function revokeMarketApproval(){
+  try{requireConnected();const id=$("approveTokenId").value.trim();if(!id)throw Error("Enter Token ID");await tx("Revoke Market approval",pdn.approve(ethers.ZeroAddress,id),"approvalResult");await checkTokenApproval()}catch(e){out("approvalResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function checkTokenApproval(){
+  try{requireConnected();const id=$("approveTokenId").value.trim();out("approvalResult",{approved:await pdn.getApproved(id),market:await pdn.market(),isApprovedForAll:await pdn.isApprovedForAll(walletAddress,await pdn.market())})}catch(e){out("approvalResult",{error:e.shortMessage||e.message})}
+}
+async function sendEthByName(){
+  try{requireConnected();const name=$("sendName").value.trim(),amount=$("sendAmount").value.trim();if(!name||!amount)throw Error("Domain name and ETH amount are required");const canonical=await pdn.canonicalize(name),id=await pdn.tokenIdByName(canonical);if(id===0n)throw Error("Domain not registered");const owner=await pdn.ownerOf(id);inline("sendResult",{domain:name,tokenId:id.toString(),currentOwner:owner,amountETH:amount});await tx("Send ETH by domain name",pdn.sendETH(name,{value:wei(amount)}),"sendResult")}catch(e){inline("sendResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function createListing(){
+  try{requireConnected();const id=$("listingTokenId").value.trim(),price=wei($("listingPrice").value),payout=addr($("listingPayout").value);const approved=await pdn.getApproved(id);const m=await market.getAddress();if(approved.toLowerCase()!==m.toLowerCase())throw Error("First approve the Market for this token in the PDN tab");const [name,canonical]=await Promise.all([pdn.displayNameOf(id),pdn.canonicalNameOf(id)]);inline("listingCreateResult",{tokenId:id,domain:name,canonicalName:canonical,askingPriceETH:eth(price),payoutAddress:payout,marketApproval:approved});await tx("Deposit NFT and create listing",market.depositNFT(id,price,payout),"listingCreateResult");}catch(e){inline("listingCreateResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function fetchListing(id){
+  const l=await market.listings(id);
+  if(Number(l.status)===0)throw Error("Listing does not exist");
+  return l;
+}
+function listingStatus(n){return ["NONE","ACTIVE","SOLD","CANCELLED"][Number(n)]||String(n)}
+async function viewListing(){
+  try{requireConnected();const id=$("viewListingId").value.trim(),l=await fetchListing(id);out("listingResult",{listingId:id,tokenId:l.tokenId.toString(),seller:l.originalDepositor,payoutAddress:l.payoutAddress,priceETH:eth(l.price),status:listingStatus(l.status),displayName:l.displayName,canonicalName:l.canonicalName})}catch(e){out("listingResult",{error:e.shortMessage||e.message})}
+}
+async function quotePurchase(){
+  try{requireConnected();const id=$("buyListingId").value.trim()||$("viewListingId").value.trim();if(!id)throw Error("Enter Listing ID");const l=await fetchListing(id);if(Number(l.status)!==1)throw Error("Listing is not active");const [bps,denom]=await Promise.all([market.FEE_BPS(),market.BPS_DENOMINATOR()]);const fee=l.price*bps/denom,total=l.price+fee;$("buyListingId").value=id;$("buyPrice").value=eth(l.price)+" ETH";$("buyFee").value=eth(fee)+" ETH";$("buyTotal").value=eth(total)+" ETH";inline("buyResult",{listingId:id,domain:l.displayName,tokenId:l.tokenId.toString(),priceETH:eth(l.price),feeBps:bps.toString(),feeETH:eth(fee),totalPayableETH:eth(total)})}catch(e){inline("buyResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function buyListing(){
+  try{requireConnected();const id=$("buyListingId").value.trim();if(!id)throw Error("Enter Listing ID");const l=await fetchListing(id);if(Number(l.status)!==1)throw Error("Listing is not active");const [bps,denom]=await Promise.all([market.FEE_BPS(),market.BPS_DENOMINATOR()]);const fee=l.price*bps/denom,total=l.price+fee;$("buyPrice").value=eth(l.price)+" ETH";$("buyFee").value=eth(fee)+" ETH";$("buyTotal").value=eth(total)+" ETH";inline("buyResult",{listingId:id,domain:l.displayName,tokenId:l.tokenId.toString(),priceETH:eth(l.price),feeETH:eth(fee),totalPayableETH:eth(total),status:"Submitting transaction"});await tx("Buy domain NFT",market.buy(id,{value:total}),"buyResult")}catch(e){inline("buyResult",{error:e.shortMessage||e.message});fail(e)}
+}
+async function cancelListing(){try{requireConnected();const id=$("cancelListingId").value.trim();inline("cancelResult",{listingId:id,status:"Submitting transaction"});await tx("Cancel listing",market.cancelListing(id),"cancelResult")}catch(e){inline("cancelResult",{error:e.shortMessage||e.message});fail(e)}}
+$("mintName").addEventListener("input",updateMintPriceField);
+$("availabilityName").addEventListener("input",async()=>{try{if(pdn&&$("availabilityName").value.trim()){const n=$("availabilityName").value.trim();$("availabilityPrice").value=eth(await pdn.mintPrice(n))+" ETH"}else $("availabilityPrice").value=""}catch(e){$("availabilityPrice").value="Invalid name"}});
+$("listingPrice").addEventListener("input",async()=>{const v=$("listingPrice").value.trim();if(!v||!/^\\d+(\\.\\d*)?$/.test(v)){$("listingFeeEstimate").value="";$("listingTotalEstimate").value="";return}try{const x=wei(v),[bps,denom]=market?[await market.FEE_BPS(),await market.BPS_DENOMINATOR()]:[200n,10000n],fee=x*bps/denom;$("listingFeeEstimate").value=eth(fee)+" ETH";$("listingTotalEstimate").value=eth(x+fee)+" ETH";inline("listingCreateResult",{askingPriceETH:eth(x),feeBps:bps.toString(),estimatedFeeETH:eth(fee),buyerTotalETH:eth(x+fee)})}catch(e){$("listingFeeEstimate").value="";$("listingTotalEstimate").value="";inline("listingCreateResult",{error:e.shortMessage||e.message})}});
+async function loadContractConfig(){
+  try{
+    const response=await fetch("/api/config");
+    if(!response.ok)throw Error("Unable to load server configuration");
+    const config=await response.json();
+    pdnAddress=config.pdnAddress;
+    marketAddress=config.marketAddress;
+    if(!pdnAddress||!marketAddress)throw Error("PDN contract addresses are not configured on the server");
+    $("contractConfig").textContent="PDN and Market contract addresses loaded from server.";
+  }catch(e){
+    $("contractConfig").textContent="Contract configuration error: "+e.message;
+    $("contractConfig").classList.add("warn");
+  }
+}
+$("buyListingId").addEventListener("input",()=>{if($("buyListingId").value.trim())quotePurchase();else{$("buyPrice").value="";$("buyFee").value="";$("buyTotal").value="";}});
+window.onbeforeunload=()=>signer?"The wallet session will be cleared when this page is closed.":undefined;
+loadContractConfig();
+</script>
+</body>
+</html>
