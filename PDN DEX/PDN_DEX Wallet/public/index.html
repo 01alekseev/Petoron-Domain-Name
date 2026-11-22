@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Petoron Domain Exchange</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:#0f141b;color:#edf0f4;font-family:Arial,sans-serif}
+.page{max-width:1180px;margin:0 auto}
+h1{color:#ff9f2a;margin:0 0 8px}
+h2{color:#ffb45c;font-size:19px;margin:0 0 14px}
+h3{color:#ffb45c;font-size:15px;margin:0 0 10px}
+.note{color:#aab2c0;font-size:13px;line-height:1.5}
+.box{border:1px solid #333d4b;background:#151b24;padding:18px;border-radius:12px;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:block;font-size:13px;font-weight:bold;margin:12px 0 5px}
+input,select{width:100%;background:#202938;color:#fff;border:1px solid #4b5563;border-radius:7px;padding:11px;margin:0;min-width:0}
+input[readonly]{background:#171f2a;color:#ffc178;border:1px dashed #8a6338;cursor:default;pointer-events:none;user-select:none;box-shadow:inset 0 0 0 1px rgba(255,159,42,.06)}
+input[readonly]:focus{outline:none;border-color:#b98243;box-shadow:0 0 0 2px rgba(255,159,42,.10)}
+button{background:#ff9f2a;color:#111;font-weight:bold;border:0;border-radius:7px;padding:11px 15px;cursor:pointer;margin:8px 6px 0 0}
+button.secondary{background:#2d3748;color:#fff;border:1px solid #4b5563}
+button:disabled{opacity:.45;cursor:not-allowed}
+.tabs{display:flex;gap:8px;margin:18px 0}
+.tab{background:#202938;color:#d8dee8;border:1px solid #465160;flex:1}
+.tab.active{background:#ff9f2a;color:#111;border-color:#ff9f2a}
+.panel{display:none}.panel.active{display:block}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.actions button{flex:1;min-width:180px}
+pre{background:#090d13;border:1px solid #303846;padding:13px;border-radius:8px;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;min-height:42px;color:#dce3ed}
+.warn{color:#ffcc66}.ok{color:#7dff9b}
+.section{border-top:1px solid #303846;padding-top:16px;margin-top:16px}
+.field-help{font-size:12px;color:#8f9aaa;margin-top:4px}
+@media(max-width:720px){body{padding:12px}.grid{grid-template-columns:1fr}.box{padding:14px}.tabs{position:sticky;top:0;z-index:3;background:#0f141b;padding:6px 0}.actions button{min-width:100%}}
+</style></head>
+<body>
+<div class="page">
+<h1>Petoron Domain Exchange</h1>
+<p class="note">Trade assets through PDN domain-owned liquidity pools.</p>
+<div class="box">
+<h2>Connection</h2>
+<div class="grid">
+<div><label>Ethereum RPC URL</label><input id="rpcUrl" placeholder="https://mainnet.infura.io/v3/..." autocomplete="off"></div>
+<div><label>Private Key</label><input id="privateKey" type="password" placeholder="0x..." autocomplete="off"></div>
+<div><label>Wallet</label><input id="walletAddress" readonly placeholder="Not connected"></div>
+</div>
+<div class="actions"><button onclick="connectWallet()">Connect Wallet</button><button class="secondary" onclick="refreshAll()">Refresh</button><button class="secondary" onclick="disconnectWallet()">Disconnect</button></div>
+<p class="note">Local RPC + private-key connection, matching the PDN client. The key is used only in this browser process and is not sent to the local server. Run this client only on a trusted computer.</p>
+<pre id="connectionStatus">Not connected</pre>
+</div>
+<div class="tabs">
+<button id="tabSeller" class="tab active" onclick="switchTab('seller')">PDN Seller</button>
+<button id="tabBuyer" class="tab" onclick="switchTab('buyer')">PDN Buyer</button>
+</div>
+<div id="sellerPanel" class="panel active">
+<div class="box">
+<h2>My PDN domains</h2>
+<button class="secondary" onclick="loadMyDomains()">Load my domains</button>
+<pre id="myDomains">Connect wallet to load your PDN NFTs.</pre>
+</div>
+<div class="box">
+<h2>Create liquidity pool</h2>
+<p class="note">Only the current owner of the main PDN domain NFT can create pools. Each domain can have only one active pool for the same token pair. Both assets are deposited at creation.</p>
+<div class="grid">
+<div><label>Main domain Token ID</label><input id="createOwnerToken" placeholder="Your PDN NFT ID"></div>
+<div><label>Sell asset</label><select id="createSellToken" onchange="updateCreateInfo()"></select></div>
+<div><label>Payment asset</label><select id="createPaymentToken" onchange="updateCreateInfo()"></select></div>
+<div><label>Initial sell reserve</label><input id="createSellAmount" placeholder="Amount"></div>
+<div><label>Initial payment reserve</label><input id="createPaymentAmount" placeholder="Amount"></div>
+<div><label>Buyer price (payment per 1 sell asset)</label><input id="createBuyPrice" placeholder="e.g. 2750"></div>
+<div><label>Seller price (payment per 1 sell asset)</label><input id="createSellPrice" placeholder="e.g. 2600"></div>
+</div>
+<p class="field-help" id="createDecimals">Token decimals are read from the DEX contract.</p>
+<button onclick="createPool()">Approve assets and create pool</button>
+<button class="secondary" onclick="createSingleReservePool()">Create single-reserve pool</button>
+<pre id="createResult">Enter the pool details.</pre>
+</div>
+<div class="box">
+<h2>My pools</h2>
+<button class="secondary" onclick="loadMyPools()">Load pools for my domains</button>
+<pre id="myPools">No pools loaded.</pre>
+</div>
+<div class="box">
+<h2>Manage pool</h2>
+<div class="grid">
+<div><label>Pool ID</label><input id="managePoolId" placeholder="Pool ID"></div>
+<div><label>Amount</label><input id="manageAmount" placeholder="Token amount"></div>
+<div><label>Asset</label><select id="manageAsset"><option value="sell">Sell reserve</option><option value="payment">Payment reserve</option></select></div>
+</div>
+<div class="actions">
+<button onclick="fundPool(false)">Add liquidity</button><button class="secondary" onclick="withdrawPool(false)">Withdraw liquidity</button>
+<button class="secondary" onclick="pausePool()">Pause pool</button><button class="secondary" onclick="unpausePool()">Unpause pool</button><button class="secondary" onclick="closePool()">Close pool</button>
+</div>
+<div class="section"><h3>Set prices</h3><div class="grid"><div><label>Buyer price (payment per 1 sell asset)</label><input id="newBuyPrice" placeholder="Price"></div><div><label>Seller price (payment per 1 sell asset)</label><input id="newSellPrice" placeholder="Price"></div></div><div class="actions"><button onclick="setPrice(false)">Update buyer price</button><button class="secondary" onclick="setPrice(true)">Update seller price</button></div></div>
+<pre id="manageResult">Pool management actions will appear here.</pre>
+</div>
+<div class="box">
+<h2>PDN Managers</h2>
+<p class="note">Managers are assigned per pool by PDN NFT Token ID. Maximum 7 active managers per pool. A manager cannot be the main domain owner or a token owned by that owner.</p>
+<div class="grid"><div><label>Pool ID</label><input id="managerPoolId" placeholder="Pool ID"></div><div><label>Manager PDN Token ID</label><input id="managerTokenId" placeholder="Manager NFT ID"></div></div>
+<div class="actions"><button onclick="setManager(true)">Add manager</button><button class="secondary" onclick="setManager(false)">Remove manager</button><button class="secondary" onclick="revokeManagers()">Revoke all managers</button><button class="secondary" onclick="loadManagers()">View managers</button></div>
+<pre id="managerResult">Manager operations will appear here.</pre>
+</div>
+<div class="box">
+<h2>Manager liquidity operations</h2>
+<p class="note">A manager selects an existing pool by Pool ID. Managers cannot create or close pools, pause pools, or change manager permissions. They can add/withdraw either reserve and update both prices.</p>
+<div class="grid"><div><label>Pool ID</label><input id="managerActionPoolId" placeholder="Pool ID"></div><div><label>Amount</label><input id="managerActionAmount" placeholder="Amount"></div><div><label>Asset</label><select id="managerActionAsset"><option value="sell">Sell reserve</option><option value="payment">Payment reserve</option></select></div></div>
+<div class="actions"><button onclick="fundPool(true)">Add liquidity</button><button class="secondary" onclick="withdrawPool(true)">Withdraw liquidity</button></div>
+<div class="grid"><div><label>Buyer price</label><input id="managerBuyPrice" placeholder="Payment per sell asset"></div><div><label>Seller price</label><input id="managerSellPrice" placeholder="Payment per sell asset"></div></div>
+<div class="actions"><button onclick="setPrice(false,true)">Update buyer price</button><button class="secondary" onclick="setPrice(true,true)">Update seller price</button></div>
+<pre id="managerActionResult">Manager actions will appear here.</pre>
+</div>
+</div>
+<div id="buyerPanel" class="panel">
+<div class="box"><h2>Browse active pools</h2><button class="secondary" onclick="loadAllPools()">Load pools</button><pre id="poolList">Load active pools to browse available liquidity.</pre></div>
+<div class="box"><h2>Buy from a pool</h2><p class="note">Buyer must own a PDN NFT. The buyer cannot trade with their own domain pool or a pool where they are a manager.</p>
+<div class="grid"><div><label>Pool ID</label><input id="buyPoolId" placeholder="Pool ID"></div><div><label>Your PDN Token ID</label><input id="buyTokenId" placeholder="Buyer NFT ID"></div><div><label>Sell amount</label><input id="buyAmount" placeholder="Amount to buy"></div><div><label>Maximum payment (slippage protection)</label><input id="buyMaxPayment" placeholder="Maximum payment"></div></div>
+<div class="actions"><button class="secondary" onclick="quoteTrade(false)">Calculate payment</button><button onclick="executeTrade(false)">Buy</button></div><pre id="buyResult">Enter a pool and amount.</pre></div>
+<div class="box"><h2>Sell into a pool</h2><p class="note">Seller must own a PDN NFT. The pool must have enough payment reserve and a non-zero seller price.</p>
+<div class="grid"><div><label>Pool ID</label><input id="sellPoolId" placeholder="Pool ID"></div><div><label>Your PDN Token ID</label><input id="sellTokenId" placeholder="Seller NFT ID"></div><div><label>Sell amount</label><input id="sellAmount" placeholder="Amount to sell"></div><div><label>Minimum payment (slippage protection)</label><input id="sellMinPayment" placeholder="Minimum payment"></div></div>
+<div class="actions"><button class="secondary" onclick="quoteTrade(true)">Calculate payment</button><button onclick="executeTrade(true)">Sell</button></div><pre id="sellResult">Enter a pool and amount.</pre></div>
+</div>
+<div class="box"><h2>Transaction log</h2><pre id="log">Ready</pre></div>
+</div>
+<script>
+let CORE='0x238B9b6De2A247178307d504e9B8DE5A98be4864';
+const TOKENS={ETH:{address:ethers.ZeroAddress,decimals:18},WBTC:{address:'0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',decimals:8},USDT:{address:'0xdAC17F958D2ee523a2206206994597C13D831ec7',decimals:6},USDC:{address:'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',decimals:6}};
+const DEX_ABI=[
+'function PDN_CORE() view returns(address)','function pdnCore() view returns(address)','function nextPoolId() view returns(uint256)','function MAX_MANAGERS_PER_POOL() view returns(uint256)','function pools(uint256) view returns(uint256 ownerTokenId,address sellToken,address paymentToken,uint256 reserve,uint256 reservePayment,uint256 priceNumerator,uint256 priceDenominator,uint256 sellPriceNumerator,uint256 sellPriceDenominator,uint8 status,bool paused)','function managerEpoch(uint256) view returns(uint256)','function managers(uint256,uint256) view returns(uint256 tokenId,uint256 epoch,bool active)','function getManagerTokenIds(uint256) view returns(uint256[])','function getTokenDecimals(address) pure returns(uint8)','function quotePayment(uint256,uint256) view returns(uint256)','function quoteSell(uint256,uint256) view returns(uint256)',
+'function createPool(uint256,address,address,uint256,uint256,uint256,uint256,uint256,uint256) payable returns(uint256)','function addFunds(uint256,uint256) payable','function managerAddFunds(uint256,uint256) payable','function addPaymentFunds(uint256,uint256) payable','function managerAddPaymentFunds(uint256,uint256) payable','function withdrawFunds(uint256,uint256)','function managerWithdraw(uint256,uint256)','function withdrawPaymentFunds(uint256,uint256)','function managerWithdrawPayment(uint256,uint256)','function setPrice(uint256,uint256,uint256)','function setSellPrice(uint256,uint256,uint256)','function setManager(uint256,uint256,bool)','function revokeAllManagers(uint256)','function pausePool(uint256)','function unpausePool(uint256)','function closePool(uint256)','function buy(uint256,uint256,uint256,uint256,uint256,uint256) payable','function sell(uint256,uint256,uint256,uint256,uint256,uint256) payable'];
+const ERC20_ABI=['function allowance(address,address) view returns(uint256)','function approve(address,uint256) returns(bool)','function decimals() view returns(uint8)','function symbol() view returns(string)','function balanceOf(address) view returns(uint256)'];
+const CORE_ABI=['function ownerOf(uint256) view returns(address)','function balanceOf(address) view returns(uint256)','function nextTokenId() view returns(uint256)','function displayNameOf(uint256) view returns(string)','function canonicalNameOf(uint256) view returns(string)'];
+let provider=null,signer=null,dex=null,core=null,wallet=null,dexAddress=null;
+const $=id=>document.getElementById(id), out=(id,v)=>$(id).textContent=typeof v==='string'?v:JSON.stringify(v,null,2), log=v=>out('log',v), err=e=>({error:e.shortMessage||e.reason||e.message||String(e)});
+function switchTab(t){for(const n of ['seller','buyer']){$(n+'Panel').classList.toggle('active',n===t);$('tab'+n[0].toUpperCase()+n.slice(1)).classList.toggle('active',n===t)}}
+function connected(){if(!signer||!dex||!core)throw Error('Connect wallet first')}
+function tokenAddress(symbol){return TOKENS[symbol].address}
+function tokenSymbol(address){const x=Object.entries(TOKENS).find(([k,v])=>v.address.toLowerCase()===address.toLowerCase());return x?x[0]:address}
+async function decimals(address){return Number(await dex.getTokenDecimals(address))}
+async function parseAmount(value,address){const text=String(value).trim();if(!text||!/^[0-9]+(?:\.[0-9]+)?$/.test(text))throw Error('Enter a valid positive decimal amount.');const d=await decimals(address);if((text.split('.')[1]||'').length>d)throw Error(`${tokenSymbol(address)} supports at most ${d} decimal places.`);const amount=ethers.parseUnits(text,d);if(amount<=0n)throw Error('Amount must be greater than zero.');return amount}
+async function parsePrice(value,address){const text=String(value).trim();if(!text||!/^[0-9]+(?:\.[0-9]+)?$/.test(text))throw Error('Enter a valid positive price.');const d=await decimals(address);if((text.split('.')[1]||'').length>d)throw Error(`${tokenSymbol(address)} price supports at most ${d} decimal places.`);const amount=ethers.parseUnits(text,d);if(amount<=0n)throw Error('Price must be greater than zero.');return amount}
+async function formatAmount(value,address){return ethers.formatUnits(value,await decimals(address))}
+function tokenOptions(id){$(id).innerHTML=Object.keys(TOKENS).map(k=>`<option value="${k}">${k}</option>`).join('')}
+async function connectWallet(){try{if(!dexAddress)await loadServerConfig();const rpc=$('rpcUrl').value.trim(),key=$('privateKey').value.trim();if(!rpc||!key)throw Error('Enter Ethereum RPC URL and private key.');if(!dexAddress)throw Error('PDN DEX address is not configured on the local server. Set DEX_ADDRESS in server.js environment.');provider=new ethers.JsonRpcProvider(rpc);signer=new ethers.Wallet(key.startsWith('0x')?key:'0x'+key,provider);wallet=await signer.getAddress();const net=await provider.getNetwork();if(net.chainId!==1n)throw Error('RPC must connect to Ethereum Mainnet (chain ID 1).');dexAddress=ethers.getAddress(dexAddress);dex=new ethers.Contract(dexAddress,DEX_ABI,signer);const configured=await dex.PDN_CORE();if(configured.toLowerCase()!==CORE.toLowerCase())throw Error('This DEX has an unexpected PDN_CORE address.');core=new ethers.Contract(CORE,CORE_ABI,signer);$('walletAddress').value=wallet;out('connectionStatus',{connected:true,chainId:net.chainId.toString(),wallet,dex:dexAddress,pdnCore:CORE});log('RPC wallet connected. PDN_CORE verified.');}catch(e){provider=signer=dex=core=null;wallet=null;$('walletAddress').value='';out('connectionStatus',err(e));log(err(e))}}
+function disconnectWallet(){provider=signer=dex=core=null;wallet=null;$('walletAddress').value='';$('privateKey').value='';out('connectionStatus','Disconnected. Private key cleared from the input.');log('Disconnected')}
+async function tx(label,promise,target){out(target,{action:label,status:'Waiting for wallet confirmation'});const t=await promise;out(target,{action:label,hash:t.hash,status:'Pending'});const r=await t.wait();const v={action:label,hash:t.hash,status:r.status===1?'Confirmed':'Failed',blockNumber:r.blockNumber};out(target,v);log(v);return r}
+async function approveIfNeeded(address,amount){if(address===ethers.ZeroAddress)return;const c=new ethers.Contract(address,ERC20_ABI,signer);const a=await c.allowance(wallet,dexAddress);if(a<amount){if(a>0n)await tx('Reset '+tokenSymbol(address)+' approval',c.approve(dexAddress,0),'log');await tx('Approve '+tokenSymbol(address),c.approve(dexAddress,amount),'log')}}
+async function sendAsset(address,amount,fn){if(address===ethers.ZeroAddress)return fn({value:amount});await approveIfNeeded(address,amount);return fn({value:0})}
+async function createPool(){try{connected();const id=$('createOwnerToken').value.trim(),a=tokenAddress($('createSellToken').value),b=tokenAddress($('createPaymentToken').value);if(a===b)throw Error('Choose two different assets.');const amountA=await parseAmount($('createSellAmount').value,a),amountB=await parseAmount($('createPaymentAmount').value,b);const da=await decimals(a),db=await decimals(b);const buy=await parsePrice($('createBuyPrice').value,b),sell=await parsePrice($('createSellPrice').value,b),unit=10n**BigInt(da);const value=a===ethers.ZeroAddress?amountA:b===ethers.ZeroAddress?amountB:0n;const call=()=>dex['createPool(uint256,address,address,uint256,uint256,uint256,uint256,uint256,uint256)'](id,a,b,amountA,amountB,buy,unit,sell,unit,{value});await approveIfNeeded(a,amountA);await approveIfNeeded(b,amountB);await tx('Create liquidity pool',call(), 'createResult');}catch(e){out('createResult',err(e));log(err(e))}}
+async function createSingleReservePool(){try{connected();const id=$('createOwnerToken').value.trim(),a=tokenAddress($('createSellToken').value),b=tokenAddress($('createPaymentToken').value);if(a===b)throw Error('Choose two different assets.');const amount=await parseAmount($('createSellAmount').value,a),price=await parsePrice($('createBuyPrice').value,b),unit=10n**BigInt(await decimals(a)),value=a===ethers.ZeroAddress?amount:0n;await approveIfNeeded(a,amount);await tx('Create single-reserve pool',dex['createPool(uint256,address,address,uint256,uint256,uint256)'](id,a,b,amount,price,unit,{value}),'createResult')}catch(e){out('createResult',err(e));log(err(e))}}
+async function pool(id){const p=await dex.pools(id);if(Number(p.status)!==1)throw Error('Pool is not active.');return p}
+async function poolObj(id,p){return {poolId:String(id),ownerTokenId:p.ownerTokenId.toString(),sellAsset:tokenSymbol(p.sellToken),paymentAsset:tokenSymbol(p.paymentToken),sellReserve:await formatAmount(p.reserve,p.sellToken),paymentReserve:await formatAmount(p.reservePayment,p.paymentToken),buyerPrice:p.priceDenominator===0n?'Not set':`${await formatAmount(p.priceNumerator,p.paymentToken)} per ${await formatAmount(p.priceDenominator,p.sellToken)}`,sellerPrice:p.sellPriceDenominator===0n?'Not set':`${await formatAmount(p.sellPriceNumerator,p.paymentToken)} per ${await formatAmount(p.sellPriceDenominator,p.sellToken)}`,paused:p.paused}}
+async function loadMyDomains(){try{connected();const next=await core.nextTokenId(),items=[];for(let i=1n;i<next;i++){try{if((await core.ownerOf(i)).toLowerCase()===wallet.toLowerCase())items.push({tokenId:i.toString(),name:await core.displayNameOf(i)})}catch{}}out('myDomains',items)}catch(e){out('myDomains',err(e))}}
+async function loadMyPools(){try{connected();const next=await dex.nextPoolId(),items=[];for(let i=1n;i<next;i++){try{const p=await dex.pools(i);if(Number(p.status)===1&&(await core.ownerOf(p.ownerTokenId)).toLowerCase()===wallet.toLowerCase())items.push(await poolObj(i,p))}catch{}}out('myPools',items)}catch(e){out('myPools',err(e))}}
+async function loadAllPools(){try{connected();const next=await dex.nextPoolId(),items=[];for(let i=1n;i<next;i++){try{const p=await dex.pools(i);if(Number(p.status)===1)items.push(await poolObj(i,p))}catch{}}out('poolList',items)}catch(e){out('poolList',err(e))}}
+async function fundPool(manager){try{connected();const id=$(manager?'managerActionPoolId':'managePoolId').value.trim(),amountText=$(manager?'managerActionAmount':'manageAmount').value.trim(),asset=$(manager?'managerActionAsset':'manageAsset').value,p=await pool(id),address=asset==='sell'?p.sellToken:p.paymentToken,amount=await parseAmount(amountText,address);let fn;if(asset==='sell')fn=()=>manager?dex.managerAddFunds(id,amount,{value:address===ethers.ZeroAddress?amount:0}):dex.addFunds(id,amount,{value:address===ethers.ZeroAddress?amount:0});else fn=()=>manager?dex.managerAddPaymentFunds(id,amount,{value:address===ethers.ZeroAddress?amount:0}):dex.addPaymentFunds(id,amount,{value:address===ethers.ZeroAddress?amount:0});if(address!==ethers.ZeroAddress)await approveIfNeeded(address,amount);await tx('Add '+asset+' reserve',fn(),manager?'managerActionResult':'manageResult')}catch(e){out(manager?'managerActionResult':'manageResult',err(e))}}
+async function withdrawPool(manager){try{connected();const id=$(manager?'managerActionPoolId':'managePoolId').value.trim(),amountText=$(manager?'managerActionAmount':'manageAmount').value.trim(),asset=$(manager?'managerActionAsset':'manageAsset').value,p=await pool(id),address=asset==='sell'?p.sellToken:p.paymentToken,amount=await parseAmount(amountText,address);const fn=asset==='sell'?(manager?dex.managerWithdraw(id,amount):dex.withdrawFunds(id,amount)):(manager?dex.managerWithdrawPayment(id,amount):dex.withdrawPaymentFunds(id,amount));await tx('Withdraw '+asset+' reserve',fn,manager?'managerActionResult':'manageResult')}catch(e){out(manager?'managerActionResult':'manageResult',err(e))}}
+async function setPrice(sell,manager=false){try{connected();const id=$(manager?'managerActionPoolId':'managePoolId').value.trim(),p=await pool(id),field=manager?(sell?'managerSellPrice':'managerBuyPrice'):(sell?'newSellPrice':'newBuyPrice'),value=$(field).value.trim(),d=await decimals(p.sellToken),pd=await decimals(p.paymentToken),num=await parsePrice(value,p.paymentToken),den=10n**BigInt(d);await tx(sell?'Update seller price':'Update buyer price',sell?dex.setSellPrice(id,num,den):dex.setPrice(id,num,den),manager?'managerActionResult':'manageResult')}catch(e){out(manager?'managerActionResult':'manageResult',err(e))}}
+async function pausePool(){try{connected();const id=$('managePoolId').value.trim();await tx('Pause pool',dex.pausePool(id),'manageResult')}catch(e){out('manageResult',err(e))}}
+async function unpausePool(){try{connected();const id=$('managePoolId').value.trim();await tx('Unpause pool',dex.unpausePool(id),'manageResult')}catch(e){out('manageResult',err(e))}}
+async function closePool(){try{connected();const id=$('managePoolId').value.trim();if(!confirm('Close this pool and return both reserves to the current PDN owner?'))return;await tx('Close pool',dex.closePool(id),'manageResult')}catch(e){out('manageResult',err(e))}}
+async function setManager(active){try{connected();const id=$('managerPoolId').value.trim(),token=$('managerTokenId').value.trim();await tx(active?'Add manager':'Remove manager',dex.setManager(id,token,active),'managerResult')}catch(e){out('managerResult',err(e))}}
+async function revokeManagers(){try{connected();await tx('Revoke all managers',dex.revokeAllManagers($('managerPoolId').value.trim()),'managerResult')}catch(e){out('managerResult',err(e))}}
+async function loadManagers(){try{connected();const id=$('managerPoolId').value.trim(),p=await pool(id),ids=await dex.getManagerTokenIds(id),items=[];for(const n of ids){const m=await dex.managers(p.ownerTokenId,n);items.push({tokenId:n.toString(),active:m.active,epoch:m.epoch.toString(),owner:await core.ownerOf(n)})}out('managerResult',items)}catch(e){out('managerResult',err(e))}}
+async function quoteTrade(sell){try{connected();const id=$(sell?'sellPoolId':'buyPoolId').value.trim(),amountText=$(sell?'sellAmount':'buyAmount').value.trim(),p=await pool(id);if(p.paused)throw Error('This pool is paused.');const amount=await parseAmount(amountText,p.sellToken),q=sell?await dex.quoteSell(id,amount):await dex.quotePayment(id,amount),formatted=await formatAmount(q,p.paymentToken);out(sell?'sellResult':'buyResult',{poolId:id,sellAmount:amountText,paymentAmount:formatted,paymentAsset:tokenSymbol(p.paymentToken),direction:sell?'Sell asset to pool':'Buy asset from pool'});return {p,amount,q}}catch(e){out(sell?'sellResult':'buyResult',err(e));throw e}}
+async function executeTrade(sell){const target=sell?'sellResult':'buyResult';try{connected();const id=$(sell?'sellPoolId':'buyPoolId').value.trim(),tokenId=$(sell?'sellTokenId':'buyTokenId').value.trim(),amountText=$(sell?'sellAmount':'buyAmount').value.trim(),p=await pool(id);if(p.paused)throw Error('This pool is paused.');const amount=await parseAmount(amountText,p.sellToken),num=sell?p.sellPriceNumerator:p.priceNumerator,den=sell?p.sellPriceDenominator:p.priceDenominator;if(num===0n||den===0n)throw Error('This trade direction is not configured.');const quote=sell?await dex.quoteSell(id,amount):await dex.quotePayment(id,amount),limitText=$(sell?'sellMinPayment':'buyMaxPayment').value.trim(),limit=limitText?await parseAmount(limitText,p.paymentToken):quote;if(sell){await approveIfNeeded(p.sellToken,amount);await tx('Sell into pool',dex.sell(id,tokenId,amount,num,den,limit,{value:p.sellToken===ethers.ZeroAddress?amount:0n}),target)}else{await approveIfNeeded(p.paymentToken,quote);await tx('Buy from pool',dex.buy(id,tokenId,amount,num,den,limit,{value:p.paymentToken===ethers.ZeroAddress?quote:0n}),target)}}catch(e){out(target,err(e));log(err(e))}}
+async function refreshAll(){try{connected();const [b,n,block]=await Promise.all([provider.getBalance(wallet),provider.getNetwork(),provider.getBlockNumber()]);out('connectionStatus',{connected:true,wallet,balanceETH:ethers.formatEther(b),chainId:n.chainId.toString(),blockNumber:block,dex:dexAddress,pdnCore:CORE})}catch(e){out('connectionStatus',err(e))}}
+for(const id of ['createSellToken','createPaymentToken'])tokenOptions(id);
+async function updateCreateInfo(){try{if(!dex)return;const a=tokenAddress($('createSellToken').value),b=tokenAddress($('createPaymentToken').value);$('createDecimals').textContent=`Sell asset: ${await decimals(a)} decimals · Payment asset: ${await decimals(b)} decimals. Price inputs are human-readable payment units per 1 sell asset.`}catch(e){$('createDecimals').textContent=e.message}}
+$('createSellToken').addEventListener('change',updateCreateInfo);$('createPaymentToken').addEventListener('change',updateCreateInfo);
+async function loadServerConfig(){try{const r=await fetch('/api/config');if(!r.ok)throw Error('Server config unavailable');const c=await r.json();if(c.pdnAddress)CORE=ethers.getAddress(c.pdnAddress);dexAddress=c.dexAddress?ethers.getAddress(c.dexAddress):null;out('connectionStatus',{server:'local',pdnCore:CORE,dexAddress:dexAddress||'DEX_ADDRESS is not configured on server'});}catch(e){dexAddress=null;out('connectionStatus',{serverConfigError:e.message})}}
+loadServerConfig();
+</script>
+</body>
+</html>
