@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PDN NFT Magazine</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:24px;background:#0f141b;color:#edf0f4;font-family:Arial,sans-serif}
+.page{max-width:1180px;margin:0 auto}
+h1{color:#ff9f2a;margin:0 0 8px}
+h2{color:#ffb45c;font-size:19px;margin:0 0 14px}
+h3{color:#ffb45c;font-size:15px;margin:0 0 10px}
+.note{color:#aab2c0;font-size:13px;line-height:1.5}
+.box{border:1px solid #333d4b;background:#151b24;padding:18px;border-radius:12px;margin:0 0 16px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:block;font-size:13px;font-weight:bold;margin:12px 0 5px}
+input,select{width:100%;background:#202938;color:#fff;border:1px solid #4b5563;border-radius:7px;padding:11px;margin:0;min-width:0}
+input[readonly]{background:#171f2a;color:#ffc178;border:1px dashed #8a6338;cursor:default;pointer-events:none;user-select:none;box-shadow:inset 0 0 0 1px rgba(255,159,42,.06)}
+input[readonly]:focus{outline:none;border-color:#b98243;box-shadow:0 0 0 2px rgba(255,159,42,.10)}
+button{background:#ff9f2a;color:#111;font-weight:bold;border:0;border-radius:7px;padding:11px 15px;cursor:pointer;margin:8px 6px 0 0}
+button.secondary{background:#2d3748;color:#fff;border:1px solid #4b5563}
+button:disabled{opacity:.45;cursor:not-allowed}
+.tabs{display:flex;gap:8px;margin:18px 0}
+.tab{background:#202938;color:#d8dee8;border:1px solid #465160;flex:1}
+.tab.active{background:#ff9f2a;color:#111;border-color:#ff9f2a}
+.panel{display:none}.panel.active{display:block}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.actions button{flex:1;min-width:180px}
+pre{background:#090d13;border:1px solid #303846;padding:13px;border-radius:8px;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;min-height:42px;color:#dce3ed}
+.warn{color:#ffcc66}.ok{color:#7dff9b}
+.section{border-top:1px solid #303846;padding-top:16px;margin-top:16px}
+.field-help{font-size:12px;color:#8f9aaa;margin-top:4px}
+@media(max-width:720px){body{padding:12px}.grid{grid-template-columns:1fr}.box{padding:14px}.tabs{position:sticky;top:0;z-index:3;background:#0f141b;padding:6px 0}.actions button{min-width:100%}}
+</style>
+</head>
+<body>
+<div class="page">
+<h1>PDN NFT Magazine</h1>
+<p class="note">Discover, list and trade ERC-721 and ERC-1155 assets through the PDN ecosystem.</p>
+
+<div class="box">
+<h2>Connection</h2>
+<div class="grid">
+<div><label>Ethereum RPC URL</label><input id="rpc" placeholder="https://..."></div>
+<div><label>Private Key</label><input id="privateKey" type="password" autocomplete="off" placeholder="0x..."></div>
+</div>
+<p class="note" id="contractConfig">Loading Magazine contract configuration...</p>
+<div class="actions">
+<button onclick="connectWallet()">Connect</button>
+<button class="secondary" onclick="refreshConnection()">Refresh Wallet</button>
+<button class="secondary" onclick="disconnectWallet()">Disconnect</button>
+</div>
+<p class="note">The private key is used in this browser to sign transactions. It is not sent to the application server. Use this client only on a trusted local device.</p>
+<pre id="connectionStatus">Not connected</pre>
+</div>
+
+<div class="tabs">
+<button id="tabMagazine" class="tab active" onclick="switchTab('magazine')">Magazine</button>
+<button id="tabMy" class="tab" onclick="switchTab('my')">My Listings</button>
+<button id="tabProtocol" class="tab" onclick="switchTab('protocol')">Protocol</button>
+</div>
+
+<div id="magazinePanel" class="panel active">
+<div class="box">
+<h2>BUYER</h2>
+<p class="note">Browse available NFTs, inspect listings and purchase assets. The 2% fee is paid by the buyer on top of the seller price.</p>
+</div>
+<div class="box">
+<h2>Available NFTs for purchase</h2>
+<p class="note">Loads active ERC-721 and ERC-1155 listings recorded by NFTMagazine.</p>
+<div class="actions">
+<button class="secondary" onclick="loadActiveListings()">Browse Active Listings</button>
+<button class="secondary" onclick="refreshAll()">Refresh</button>
+</div>
+<pre id="activeListings">Connect your wallet to browse active listings.</pre>
+</div>
+
+<div class="box">
+<h2>3. View listing</h2>
+<div class="grid">
+<div><label>Listing ID</label><input id="viewListingId" placeholder="1"></div>
+</div>
+<div class="actions">
+<button class="secondary" onclick="viewListing()">Load Listing</button>
+<button class="secondary" onclick="quotePurchase()">Calculate Total</button>
+</div>
+<pre id="listingResult"></pre>
+</div>
+
+<div class="box">
+<h2>4. Buy NFT</h2>
+<p class="note">The client reads the on-chain listing price and calculates the exact total, including the contract fee. The contract requires msg.value to equal asking price plus the fee.</p>
+<div class="grid">
+<div><label>Listing ID</label><input id="buyListingId" placeholder="1"></div>
+<div><label>Listing price</label><input id="buyPrice" readonly tabindex="-1"></div>
+<div><label>Buyer fee</label><input id="buyFee" readonly tabindex="-1"></div>
+<div><label>Total payable</label><input id="buyTotal" readonly tabindex="-1"></div>
+</div>
+<div class="actions">
+<button class="secondary" onclick="quotePurchase()">Calculate Total</button>
+<button onclick="buyListing()">Buy NFT</button>
+</div>
+<pre id="buyResult">Purchase quote and transaction status will appear here.</pre>
+</div>
+
+<div class="box">
+<h2>SELLER</h2>
+<p class="note">Approve your NFT, deposit it into escrow, set the asking price and manage or cancel your listings.</p>
+</div>
+<div class="box">
+<h2>1. NFT approval for Magazine</h2>
+<p class="note">ERC-721 requires token approval or operator approval. ERC-1155 requires operator approval.</p>
+<div class="grid">
+<div><label>NFT standard</label><select id="approveStandard"><option value="1">ERC-721</option><option value="2">ERC-1155</option></select></div>
+<div><label>NFT contract address</label><input id="approveNFTAddress" placeholder="0x..."></div>
+<div><label>Token ID</label><input id="approveTokenId" placeholder="1"></div>
+</div>
+<div class="actions">
+<button onclick="approveNFT()">Approve Magazine</button>
+<button class="secondary" onclick="revokeNFTApproval()">Revoke Approval</button>
+<button class="secondary" onclick="checkNFTApproval()">Check Approval</button>
+</div>
+<pre id="approvalResult"></pre>
+</div>
+
+<div class="box">
+<h2>2. Create NFT listing</h2>
+<p class="note">The NFT is deposited into the Magazine escrow. The selected PDN domain must belong to the connected wallet. The configured payout address receives the asking price; the buyer pays the 2% fee on top.</p>
+<div class="grid">
+<div><label>NFT standard</label><select id="listingStandard"><option value="1">ERC-721</option><option value="2">ERC-1155</option></select></div>
+<div><label>NFT contract address</label><input id="listingNFTAddress" placeholder="0x..."></div>
+<div><label>NFT Token ID</label><input id="listingTokenId" placeholder="1"></div>
+<div id="listingAmountField"><label>ERC-1155 amount</label><input id="listingAmount" placeholder="1"></div>
+<div><label>Your asking price (ETH)</label><input id="listingPrice" placeholder="0.1"></div>
+<div><label>Buyer fee (2%)</label><input id="listingFeeEstimate" readonly tabindex="-1"></div>
+<div><label>Buyer total (asking price + fee)</label><input id="listingTotalEstimate" readonly tabindex="-1"></div>
+<div><label>Seller payout address (receives asking price)</label><input id="listingPayout" placeholder="0x..."></div>
+<div><label>Your PDN domain Token ID</label><input id="listingPdnTokenId" placeholder="1"></div>
+</div>
+<div class="section">
+<h3>PDN tier and listing capacity</h3>
+<div class="grid">
+<div><label>Tier</label><input id="tierName" readonly tabindex="-1"></div>
+<div><label>Listing limit</label><input id="tierLimit" readonly tabindex="-1"></div>
+<div><label>Active listings</label><input id="tierActive" readonly tabindex="-1"></div>
+<div><label>Available slots</label><input id="tierSlots" readonly tabindex="-1"></div>
+</div>
+<div class="actions">
+<button class="secondary" onclick="checkTier()">Check PDN Tier & Limits</button>
+<button onclick="createListing()">Deposit NFT and Create Listing</button>
+</div>
+</div>
+<pre id="listingCreateResult">Listing calculation and transaction status will appear here.</pre>
+</div>
+
+<div class="box">
+<h2>5. Cancel listing</h2>
+<div class="grid">
+<div><label>Listing ID</label><input id="cancelListingId" placeholder="1"></div>
+</div>
+<button onclick="cancelListing()">Cancel Listing and Return NFT</button>
+<pre id="cancelResult">Cancellation status will appear here.</pre>
+</div>
+</div>
+
+<div id="myPanel" class="panel">
+<div class="box">
+<h2>My active listings</h2>
+<button class="secondary" onclick="loadMyListings()">View My Listings</button>
+<pre id="myListings">Connect your wallet to view your listings.</pre>
+</div>
+<div class="box">
+<h2>My PDN domains</h2>
+<p class="note">Enter a PDN token ID to verify ownership and inspect its Magazine tier and active listing capacity.</p>
+<div class="grid">
+<div><label>PDN domain Token ID</label><input id="myPdnTokenId" placeholder="1"></div>
+</div>
+<button class="secondary" onclick="checkMyPdnDomain()">Check PDN Domain</button>
+<pre id="myPdnResult"></pre>
+</div>
+</div>
+
+<div id="protocolPanel" class="panel">
+<div class="box">
+<h2>Protocol statistics</h2>
+<button class="secondary" onclick="loadProtocol()">Refresh Protocol</button>
+<pre id="protocolStats">Connect your wallet to read protocol statistics.</pre>
+</div>
+<div class="box">
+<h2>Contract parameters</h2>
+<pre id="contractParameters"></pre>
+</div>
+</div>
+
+<div class="box">
+<h2>Transaction log</h2>
+<pre id="log">Ready</pre>
+</div>
+</div>
+<script>
+const MAGAZINE_ABI=[
+"function pdnCore() view returns(address)",
+"function FEE_BPS() view returns(uint256)",
+"function BPS_DENOMINATOR() view returns(uint256)",
+"function WITHDRAW_EXPIRY_BLOCKS() view returns(uint256)",
+"function USER_LIMIT() view returns(uint256)",
+"function PRIME_LIMIT() view returns(uint256)",
+"function EXCLUSIVE_LIMIT() view returns(uint256)",
+"function nextListingId() view returns(uint256)",
+"function protocolRevenue() view returns(uint256)",
+"function reservedProtocolRevenue() view returns(uint256)",
+"function availableProtocolRevenue() view returns(uint256)",
+"function participantTier(uint256) view returns(uint8)",
+"function listingLimit(uint256) view returns(uint256)",
+"function activeListingsByPDN(uint256) view returns(uint256)",
+"function activeListingByAsset(address,uint256,uint8,address) view returns(uint256)",
+"function getListing(uint256) view returns(tuple(address nftContract,uint256 tokenId,uint256 amount,address seller,address payoutAddress,uint256 pdnTokenId,uint256 price,uint8 standard,uint8 status))",
+"function depositERC721(address,uint256,uint256,address,uint256) returns(uint256)",
+"function depositERC1155(address,uint256,uint256,uint256,address,uint256) returns(uint256)",
+"function cancelListing(uint256)",
+"function buy(uint256) payable"
+];
+const PDN_ABI=[
+"function ownerOf(uint256) view returns(address)",
+"function balanceOf(address) view returns(uint256)",
+"function canonicalNameOf(uint256) view returns(string)",
+"function isVerified(uint256) view returns(bool)"
+];
+const ERC721_ABI=[
+"function supportsInterface(bytes4) view returns(bool)",
+"function ownerOf(uint256) view returns(address)",
+"function getApproved(uint256) view returns(address)",
+"function isApprovedForAll(address,address) view returns(bool)",
+"function approve(address,uint256)",
+"function tokenURI(uint256) view returns(string)"
+];
+const ERC1155_ABI=[
+"function supportsInterface(bytes4) view returns(bool)",
+"function balanceOf(address,uint256) view returns(uint256)",
+"function isApprovedForAll(address,address) view returns(bool)",
+"function setApprovalForAll(address,bool)",
+"function uri(uint256) view returns(string)"
+];
+let provider=null,signer=null,magazine=null,pdn=null,walletAddress=null,pdnAddress=null,magazineAddress=null,feeBps=200n,feeDenom=10000n;
+const $=id=>document.getElementById(id);
+const eth=x=>ethers.formatEther(x);
+const wei=x=>ethers.parseEther(String(x).trim());
+const addr=x=>ethers.getAddress(String(x).trim());
+const out=(id,x)=>$(id).textContent=typeof x==="string"?x:JSON.stringify(x,null,2);
+const log=x=>out("log",x);
+const inline=(id,x)=>{if($(id))out(id,x)};
+const fail=e=>log({error:e.shortMessage||e.reason||e.message||String(e)});
+const short=x=>x?x.slice(0,6)+"…"+x.slice(-4):"—";
+const tiers=["NONE","USER","PRIME","EXCLUSIVE"];
+const statuses=["NONE","ACTIVE","SOLD","CANCELLED"];
+const standards=["NONE","ERC-721","ERC-1155"];
+function requireConnected(){if(!provider||!signer||!magazine||!pdn)throw Error("Connect your wallet first")}
+function switchTab(which){
+  for(const name of ["magazine","my","protocol"])$(name+"Panel").classList.toggle("active",name===which);
+  for(const name of ["Magazine","My","Protocol"])$("tab"+name).classList.toggle("active",name.toLowerCase()===which);
+}
+async function tx(label,promise,targetId){
+  const target=targetId||"log";
+  inline(target,{action:label,status:"Waiting for confirmation"});
+  log(label+": waiting for confirmation");
+  const t=await promise;
+  const pending={action:label,transaction:t.hash,status:"pending"};
+  inline(target,pending);log(pending);
+  const r=await t.wait();
+  const result={action:label,transaction:t.hash,status:r.status===1?"confirmed":"failed",blockNumber:r.blockNumber};
+  inline(target,result);log(result);
+  if(r.status!==1)throw Error("Transaction failed");
+  await Promise.all([loadActiveListings(),loadProtocol()]);
+  return r;
+}
+async function loadContractConfig(){
+  try{
+    const response=await fetch("/api/config");
+    if(!response.ok)throw Error("Unable to load server configuration");
+    const config=await response.json();
+    pdnAddress=config.pdnAddress;magazineAddress=config.magazineAddress;
+    if(!pdnAddress||!magazineAddress)throw Error("PDN Core and NFTMagazine addresses are not configured");
+    $("contractConfig").textContent="PDN Core and NFTMagazine contract addresses loaded from server.";
+  }catch(e){$("contractConfig").textContent="Contract configuration error: "+e.message;$("contractConfig").classList.add("warn")}
+}
+async function connectWallet(){
+  try{
+    const rpcUrl=$("rpc").value.trim(),key=$("privateKey").value.trim();
+    if(!rpcUrl||!key)throw Error("RPC URL and private key are required");
+    if(!pdnAddress||!magazineAddress)throw Error("Contract configuration is unavailable");
+    provider=new ethers.JsonRpcProvider(rpcUrl);
+    signer=new ethers.Wallet(key.startsWith("0x")?key:"0x"+key,provider);
+    walletAddress=await signer.getAddress();
+    const paddr=addr(pdnAddress),maddr=addr(magazineAddress);
+    const network=await provider.getNetwork();
+    if(network.chainId!==1n)throw Error("Connect to Ethereum Mainnet (chain ID 1)");
+    const code=await provider.getCode(maddr);
+    if(code==="0x")throw Error("NFTMagazine contract code was not found");
+    magazine=new ethers.Contract(maddr,MAGAZINE_ABI,signer);
+    pdn=new ethers.Contract(paddr,PDN_ABI,provider);
+    const [balance,core,fee,denom]=await Promise.all([provider.getBalance(walletAddress),magazine.pdnCore(),magazine.FEE_BPS(),magazine.BPS_DENOMINATOR()]);
+    if(core.toLowerCase()!==paddr.toLowerCase())throw Error("NFTMagazine.pdnCore() does not match the configured PDN Core address");
+    feeBps=fee;feeDenom=denom;
+    out("connectionStatus",{connected:true,network:network.name,chainId:network.chainId.toString(),wallet:walletAddress,balanceETH:eth(balance),pdnCore:paddr,nftMagazine:maddr});
+    $("listingPayout").value=walletAddress;
+    $("contractConfig").textContent="Connected to Ethereum Mainnet · NFTMagazine verified.";
+    log("Connected. PDN Core and NFTMagazine addresses verified.");
+    await refreshAll();
+  }catch(e){provider=null;signer=null;magazine=null;pdn=null;walletAddress=null;fail(e);out("connectionStatus",{error:e.shortMessage||e.message||String(e)})}
+}
+async function refreshConnection(){
+  try{requireConnected();const [balance,block]=await Promise.all([provider.getBalance(walletAddress),provider.getBlockNumber()]);out("connectionStatus",{wallet:walletAddress,balanceETH:eth(balance),blockNumber:block})}catch(e){fail(e)}
+}
+function disconnectWallet(){
+  provider=null;signer=null;magazine=null;pdn=null;walletAddress=null;
+  $("privateKey").value="";
+  out("connectionStatus","Disconnected. Private key cleared from the input.");
+}
+async function getListing(id){
+  const l=await magazine.getListing(id);
+  if(Number(l.status)===0)throw Error("Listing does not exist");
+  return {id:String(id),nftContract:l.nftContract,tokenId:l.tokenId.toString(),amount:l.amount.toString(),seller:l.seller,payoutAddress:l.payoutAddress,pdnTokenId:l.pdnTokenId.toString(),price:l.price,standard:Number(l.standard),status:Number(l.status)};
+}
+async function loadActiveListings(){
+  try{
+    requireConnected();
+    const next=await magazine.nextListingId(),found=[];
+    for(let i=1n;i<next;i++){
+      try{const l=await getListing(i);if(l.status===1)found.push(l)}catch(e){}
+    }
+    out("activeListings",{total:found.length,listings:found.map(l=>({listingId:l.id,standard:standards[l.standard],nftContract:l.nftContract,tokenId:l.tokenId,amount:l.amount,seller:l.seller,payoutAddress:l.payoutAddress,pdnTokenId:l.pdnTokenId,priceETH:eth(l.price)}))});
+    return found;
+  }catch(e){out("activeListings",{error:e.shortMessage||e.message||String(e)});return []}
+}
+async function loadMyListings(){
+  try{
+    requireConnected();
+    const next=await magazine.nextListingId(),found=[];
+    for(let i=1n;i<next;i++){
+      try{const l=await getListing(i);if(l.seller.toLowerCase()===walletAddress.toLowerCase()&&l.status===1)found.push(l)}catch(e){}
+    }
+    out("myListings",{wallet:walletAddress,total:found.length,listings:found.map(l=>({listingId:l.id,standard:standards[l.standard],nftContract:l.nftContract,tokenId:l.tokenId,amount:l.amount,priceETH:eth(l.price),pdnTokenId:l.pdnTokenId,status:statuses[l.status]}))});
+  }catch(e){out("myListings",{error:e.shortMessage||e.message||String(e)})}
+}
+async function loadProtocol(){
+  try{
+    requireConnected();
+    const [revenue,reserved,available,bps,denom,user,prime,exclusive,expiry,next]=await Promise.all([
+      magazine.protocolRevenue(),magazine.reservedProtocolRevenue(),magazine.availableProtocolRevenue(),magazine.FEE_BPS(),magazine.BPS_DENOMINATOR(),magazine.USER_LIMIT(),magazine.PRIME_LIMIT(),magazine.EXCLUSIVE_LIMIT(),magazine.WITHDRAW_EXPIRY_BLOCKS(),magazine.nextListingId()
+    ]);
+    out("protocolStats",{protocolRevenueETH:eth(revenue),reservedRevenueETH:eth(reserved),availableRevenueETH:eth(available),activeFeeBps:bps.toString(),feeDenominator:denom.toString(),nextListingId:next.toString()});
+    out("contractParameters",{network:"Ethereum Mainnet",chainId:1,userLimit:user.toString(),primeLimit:prime.toString(),exclusiveLimit:exclusive.toString(),withdrawExpiryBlocks:expiry.toString()});
+  }catch(e){out("protocolStats",{error:e.shortMessage||e.message||String(e)})}
+}
+async function refreshAll(){requireConnected();await Promise.all([loadActiveListings(),loadMyListings(),loadProtocol()])}
+async function getNFTContract(standard,address,withSigner=true){
+  const nftAddress=addr(address);
+  if(nftAddress.toLowerCase()===pdnAddress.toLowerCase())throw Error("PDN Core NFTs cannot be listed on NFTMagazine");
+  if(await provider.getCode(nftAddress)==="0x")throw Error("NFT contract has no deployed bytecode");
+  const c=new ethers.Contract(nftAddress,standard===1?ERC721_ABI:ERC1155_ABI,withSigner?signer:provider);
+  const id=standard===1?"0x80ac58cd":"0xd9b67a26";
+  if(!(await c.supportsInterface(id)))throw Error("NFT contract does not support "+standards[standard]);
+  return c;
+}
+async function approveNFT(){
+  try{
+    requireConnected();
+    const standard=Number($("approveStandard").value),address=$("approveNFTAddress").value.trim(),id=$("approveTokenId").value.trim();
+    if(!id)throw Error("Enter Token ID");
+    const c=await getNFTContract(standard,address);
+    if(standard===1){
+      const [owner,approved,all]=await Promise.all([c.ownerOf(id),c.getApproved(id),c.isApprovedForAll(walletAddress,magazineAddress)]);
+      if(owner.toLowerCase()!==walletAddress.toLowerCase())throw Error("Connected wallet does not own this ERC-721 token");
+      if(approved.toLowerCase()===magazineAddress.toLowerCase()||all){out("approvalResult",{approved:true,standard:standards[standard],tokenId:id});return}
+      await tx("Approve ERC-721 for Magazine",c.approve(magazineAddress,id),"approvalResult");
+    }else{
+      const [balance,all]=await Promise.all([c.balanceOf(walletAddress,id),c.isApprovedForAll(walletAddress,magazineAddress)]);
+      if(balance===0n)throw Error("Connected wallet has no balance of this ERC-1155 token");
+      if(all){out("approvalResult",{approved:true,standard:standards[standard],tokenId:id});return}
+      await tx("Approve ERC-1155 operator for Magazine",c.setApprovalForAll(magazineAddress,true),"approvalResult");
+    }
+  }catch(e){out("approvalResult",{error:e.shortMessage||e.reason||e.message||String(e)});fail(e)}
+}
+async function revokeNFTApproval(){
+  try{
+    requireConnected();
+    const standard=Number($("approveStandard").value),address=$("approveNFTAddress").value.trim(),id=$("approveTokenId").value.trim();
+    const c=await getNFTContract(standard,address);
+    if(standard===1)await tx("Revoke ERC-721 approval",c.approve(ethers.ZeroAddress,id),"approvalResult");
+    else await tx("Revoke ERC-1155 operator approval",c.setApprovalForAll(magazineAddress,false),"approvalResult");
+  }catch(e){out("approvalResult",{error:e.shortMessage||e.reason||e.message||String(e)});fail(e)}
+}
+async function checkNFTApproval(){
+  try{
+    requireConnected();
+    const standard=Number($("approveStandard").value),address=$("approveNFTAddress").value.trim(),id=$("approveTokenId").value.trim(),c=await getNFTContract(standard,address);
+    if(standard===1)out("approvalResult",{owner:await c.ownerOf(id),approvedAddress:await c.getApproved(id),operatorApproved:await c.isApprovedForAll(walletAddress,magazineAddress)});
+    else out("approvalResult",{balance:(await c.balanceOf(walletAddress,id)).toString(),operatorApproved:await c.isApprovedForAll(walletAddress,magazineAddress)});
+  }catch(e){out("approvalResult",{error:e.shortMessage||e.message||String(e)})}
+}
+async function checkTier(){
+  try{
+    requireConnected();
+    const id=$("listingPdnTokenId").value.trim();if(!id)throw Error("Enter PDN domain Token ID");
+    const [owner,tier,limit,active,name,verified]=await Promise.all([pdn.ownerOf(id),magazine.participantTier(id),magazine.listingLimit(id),magazine.activeListingsByPDN(id),pdn.canonicalNameOf(id),pdn.isVerified(id)]);
+    if(owner.toLowerCase()!==walletAddress.toLowerCase())throw Error("Connected wallet does not own this PDN domain NFT");
+    const slots=limit>active?limit-active:0n;
+    $("tierName").value=tiers[Number(tier)];$("tierLimit").value=limit.toString();$("tierActive").value=active.toString();$("tierSlots").value=slots.toString();
+    inline("listingCreateResult",{pdnDomain:name,pdnTokenId:id,tier:tiers[Number(tier)],verified,activeListings:active.toString(),listingLimit:limit.toString(),availableSlots:slots.toString()});
+    if(limit===0n||slots===0n)throw Error("This PDN domain has no available listing slots");
+  }catch(e){inline("listingCreateResult",{error:e.shortMessage||e.message||String(e)});fail(e)}
+}
+async function createListing(){
+  try{
+    requireConnected();
+    const standard=Number($("listingStandard").value),address=addr($("listingNFTAddress").value),tokenId=$("listingTokenId").value.trim(),pdnId=$("listingPdnTokenId").value.trim();
+    if(!tokenId||!pdnId)throw Error("NFT Token ID and PDN domain Token ID are required");
+    const price=wei($("listingPrice").value),payout=addr($("listingPayout").value);
+    if(price===0n)throw Error("Asking price must be greater than zero");
+    if(payout===ethers.ZeroAddress)throw Error("Payout address cannot be zero");
+    const pdnOwner=await pdn.ownerOf(pdnId);
+    if(pdnOwner.toLowerCase()!==walletAddress.toLowerCase())throw Error("Connected wallet must own the selected PDN domain NFT");
+    const [limit,active]=await Promise.all([magazine.listingLimit(pdnId),magazine.activeListingsByPDN(pdnId)]);
+    if(limit===0n||active>=limit)throw Error("PDN domain has reached its active listing limit");
+    const c=await getNFTContract(standard,address);
+    let txPromise,amount="1";
+    if(standard===1){
+      const [owner,approved,all,existing]=await Promise.all([c.ownerOf(tokenId),c.getApproved(tokenId),c.isApprovedForAll(walletAddress,magazineAddress),magazine.activeListingByAsset(address,tokenId,1,ethers.ZeroAddress)]);
+      if(owner.toLowerCase()!==walletAddress.toLowerCase())throw Error("Connected wallet does not own this ERC-721 token");
+      if(existing!==0n)throw Error("This ERC-721 token already has an active listing");
+      if(approved.toLowerCase()!==magazineAddress.toLowerCase()&&!all)throw Error("Approve the ERC-721 token first");
+      txPromise=magazine.depositERC721(address,tokenId,price,payout,pdnId);
+    }else{
+      amount=$("listingAmount").value.trim();if(!amount||BigInt(amount)<=0n)throw Error("ERC-1155 amount must be greater than zero");
+      const [balance,approved,existing]=await Promise.all([c.balanceOf(walletAddress,tokenId),c.isApprovedForAll(walletAddress,magazineAddress),magazine.activeListingByAsset(address,tokenId,2,walletAddress)]);
+      if(balance<BigInt(amount))throw Error("Insufficient ERC-1155 balance");
+      if(existing!==0n)throw Error("This ERC-1155 token already has an active listing from this wallet");
+      if(!approved)throw Error("Approve the ERC-1155 operator first");
+      txPromise=magazine.depositERC1155(address,tokenId,amount,price,payout,pdnId);
+    }
+    inline("listingCreateResult",{standard:standards[standard],nftContract:address,tokenId,amount,askingPriceETH:eth(price),payoutAddress:payout,pdnTokenId:pdnId});
+    await tx("Deposit NFT and create listing",txPromise,"listingCreateResult");
+    await checkTier();
+  }catch(e){inline("listingCreateResult",{error:e.shortMessage||e.reason||e.message||String(e)});fail(e)}
+}
+async function viewListing(){
+  try{
+    requireConnected();
+    const id=$("viewListingId").value.trim();if(!id)throw Error("Enter Listing ID");
+    const l=await getListing(id),domain=await pdn.canonicalNameOf(l.pdnTokenId);
+    out("listingResult",{listingId:l.id,standard:standards[l.standard],nftContract:l.nftContract,tokenId:l.tokenId,amount:l.amount,seller:l.seller,payoutAddress:l.payoutAddress,pdnTokenId:l.pdnTokenId,pdnDomain:domain,priceETH:eth(l.price),status:statuses[l.status]});
+  }catch(e){out("listingResult",{error:e.shortMessage||e.message||String(e)})}
+}
+async function quotePurchase(){
+  try{
+    requireConnected();
+    const id=$("buyListingId").value.trim()||$("viewListingId").value.trim();if(!id)throw Error("Enter Listing ID");
+    const l=await getListing(id);if(l.status!==1)throw Error("Listing is not active");
+    const fee=l.price/(feeDenom/feeBps),total=l.price+fee;
+    $("buyListingId").value=id;$("buyPrice").value=eth(l.price)+" ETH";$("buyFee").value=eth(fee)+" ETH";$("buyTotal").value=eth(total)+" ETH";
+    out("buyResult",{listingId:id,askingPriceETH:eth(l.price),feeETH:eth(fee),totalPayableETH:eth(total),standard:standards[l.standard],tokenId:l.tokenId});
+  }catch(e){out("buyResult",{error:e.shortMessage||e.message||String(e)});fail(e)}
+}
+async function buyListing(){
+  try{
+    requireConnected();
+    const id=$("buyListingId").value.trim();if(!id)throw Error("Enter Listing ID");
+    const l=await getListing(id);if(l.status!==1)throw Error("Listing is not active");
+    if(l.seller.toLowerCase()===walletAddress.toLowerCase())throw Error("You cannot buy your own listing");
+    if(await pdn.balanceOf(walletAddress)===0n)throw Error("Buyer must own at least one PDN domain NFT");
+    const currentDomainOwner=await pdn.ownerOf(l.pdnTokenId);
+    if(currentDomainOwner.toLowerCase()!==l.seller.toLowerCase())throw Error("Seller no longer owns the PDN domain linked to this listing");
+    const fee=l.price/(feeDenom/feeBps),total=l.price+fee;
+    $("buyPrice").value=eth(l.price)+" ETH";$("buyFee").value=eth(fee)+" ETH";$("buyTotal").value=eth(total)+" ETH";
+    if(!confirm("Buy listing #"+id+" for "+eth(total)+" ETH including "+eth(fee)+" ETH protocol fee?"))return;
+    await tx("Buy NFT listing",magazine.buy(id,{value:total}),"buyResult");
+  }catch(e){out("buyResult",{error:e.shortMessage||e.reason||e.message||String(e)});fail(e)}
+}
+async function cancelListing(){
+  try{requireConnected();const id=$("cancelListingId").value.trim();if(!id)throw Error("Enter Listing ID");await tx("Cancel listing and return NFT",magazine.cancelListing(id),"cancelResult")}
+  catch(e){out("cancelResult",{error:e.shortMessage||e.reason||e.message||String(e)});fail(e)}
+}
+async function checkMyPdnDomain(){
+  try{
+    requireConnected();
+    const id=$("myPdnTokenId").value.trim();if(!id)throw Error("Enter PDN domain Token ID");
+    const [owner,tier,limit,active,name,verified]=await Promise.all([pdn.ownerOf(id),magazine.participantTier(id),magazine.listingLimit(id),magazine.activeListingsByPDN(id),pdn.canonicalNameOf(id),pdn.isVerified(id)]);
+    out("myPdnResult",{tokenId:id,domain:name,owner,ownedByConnectedWallet:owner.toLowerCase()===walletAddress.toLowerCase(),verified,tier:tiers[Number(tier)],listingLimit:limit.toString(),activeListings:active.toString(),availableSlots:(limit>active?limit-active:0n).toString()});
+  }catch(e){out("myPdnResult",{error:e.shortMessage||e.message||String(e)})}
+}
+$("listingStandard").addEventListener("change",()=>$("listingAmountField").style.display=Number($("listingStandard").value)===2?"block":"none");
+$("listingPrice").addEventListener("input",()=>{
+  const v=$("listingPrice").value.trim();
+  if(!v||!/^\d+(\.\d*)?$/.test(v)){$("listingFeeEstimate").value="";$("listingTotalEstimate").value="";return}
+  try{const price=wei(v),fee=price/(feeDenom/feeBps);$("listingFeeEstimate").value=eth(fee)+" ETH";$("listingTotalEstimate").value=eth(price+fee)+" ETH"}
+  catch(e){$("listingFeeEstimate").value="";$("listingTotalEstimate").value=""}
+});
+$("buyListingId").addEventListener("input",()=>{if($("buyListingId").value.trim())quotePurchase();else{$("buyPrice").value="";$("buyFee").value="";$("buyTotal").value=""}});
+window.onbeforeunload=()=>signer?"The wallet session will be cleared when this page is closed.":undefined;
+$("listingAmountField").style.display="none";
+loadContractConfig();
+</script>
+</body>
+</html>
